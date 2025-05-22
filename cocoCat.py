@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import json
 import cv2
 from aiortc import RTCPeerConnection, RTCSessionDescription, VideoStreamTrack
@@ -11,6 +12,7 @@ from pycoral.adapters import common, detect
 
 
 web_socket = None  # global websocket connection
+cst = None  # global camera stream track
 
 
 class CameraStreamTrack(VideoStreamTrack):
@@ -157,12 +159,34 @@ async def startRTCpc(client_offer):
             print("Connection closed")
 
 
-def handleWsMessage(message):
+async def handleWsMessage(message):
     loaded = json.loads(message)
     print("Received websocket message:", loaded)
     if loaded.get("type") == "offer":
         print("Received offer from browser")
         asyncio.create_task(startRTCpc(loaded))
+    elif loaded["type"] == "getFrame":
+        print("Received getFrame from browser")
+        global cst
+        if cst is None:
+            cst = CameraStreamTrack()
+        if cst is not None:
+            ret, frame = cst.cap.read()
+            frame = cv2.resize(frame, (640, 480))
+
+            # Encode frame to JPEG
+            _, jpeg = cv2.imencode('.jpg', frame)
+            # Base64 encode JPEG bytes
+            b64_frame = base64.b64encode(jpeg.tobytes()).decode('utf-8')
+
+            # Create JSON message
+            message = {
+                "type": "frame",
+                "frame": b64_frame
+            }
+
+            # Send as JSON string
+            await web_socket.send(json.dumps(message))
 
 
 async def connectWs():
@@ -174,7 +198,7 @@ async def connectWs():
         while True:
             try:
                 message = await websocket.recv()
-                handleWsMessage(message)
+                await handleWsMessage(message)
             except websockets.exceptions.ConnectionClosed:
                 print("Connection closed")
                 web_socket = None
