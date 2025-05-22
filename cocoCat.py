@@ -142,7 +142,9 @@ async def startRTCpc(client_offer):
     pc = RTCPeerConnection()
 
     await pc.setRemoteDescription(RTCSessionDescription(**client_offer))
-    pc.addTrack(CameraStreamTrack())
+    global cst
+    cst = CameraStreamTrack()
+    pc.addTrack(cst)
     answer = await pc.createAnswer()
     await pc.setLocalDescription(answer)
 
